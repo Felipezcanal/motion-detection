@@ -5,105 +5,141 @@ import numpy as np
 import argparse
 from pprint import pprint
 import pickle
+import imutils
+import time
 
 
-currentBackground = cv.imread("frame2946.bmp");
+currentBackground = 0
 n = 0
 lastsrc = 0
 lasts = []
+lastpasstime = 0
+lastpasspos = 0
+personCounter = 0
+out = 0
+
+detectionRectangle = [(415, 525), (590, 570)]
 
 
-video_capture = cv.VideoCapture("road.mp4")
+video_capture = cv.VideoCapture("lab.mp4")
 
 
 
 def thresh_callback(val, src_gray, original):
+    global lastpasstime, detectionRectangle, personCounter, lastpasspos
+
+
+
+
     original2 = original.copy()
     src_gray = cv.blur(src_gray, (3,3))
-    contours, _ = cv.findContours(src_gray, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+    canny = cv.Canny(src_gray, 50, 20)
+    contours, _ = cv.findContours(canny, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+
+    thresh = cv.threshold(src_gray, 25, 255, cv.THRESH_BINARY)[1]
+
+    # dilate the thresholded image to fill in holes, then find contours
+    # on thresholded image
+    thresh = cv.dilate(thresh, None, iterations=18)
+
+    # canny = cv.Canny(thresh, 50, 20)
+    contours = cv.findContours(thresh, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+
+    cnts = imutils.grab_contours(contours)
 
 
-    # Get the moments
-    # mu = [None]*len(contours)
-    # for i in range(len(contours)):
-    #     mu[i] = cv.moments(contours[i])
 
-    # Get the mass centers
-    # mc = [None]*len(contours)
-    # for i in range(len(contours)):
-    #     mc[i] = (mu[i]['m10'] / (mu[i]['m00'] + 1e-5), mu[i]['m01'] / (mu[i]['m00'] + 1e-5))
-
-
-    # Draw contours
-
-    # drawing = np.zeros((canny_output.shape[0], canny_output.shape[1], 3), dtype=np.uint8)
-    #
-    # for i in range(len(contours)):
-    #     color = (rng.randint(0,256), rng.randint(0,256), rng.randint(0,256))
-    #     cv.drawContours(drawing, contours, i, color, 2)
-    #     cv.circle(drawing, (int(mc[i][0]), int(mc[i][1])), 4, color, -1)
-
-
-    # Calculate the area with the moments 00 and compare with the result of the OpenCV function
-    for i in range(len(contours)):
-        if(len(contours[i]) < 150):
+    cv.rectangle(original2, detectionRectangle[0], detectionRectangle[1], (0, 0, 255), 2)
+    # loop over the contours
+    for c in cnts:
+        # if the contour is too small, ignore it
+        if cv.contourArea(c) < 40000:
             continue
-        else:
-            # cv.imshow('Contours'+str(i), )
-            # minx = max(contours[i])
-            # pprint(max(contours[i][0]))
-            c = contours[i]
-            extLeft = tuple(c[c[:, :, 0].argmin()][0])
-            extRight = tuple(c[c[:, :, 0].argmax()][0])
-            extTop = tuple(c[c[:, :, 1].argmin()][0])
-            extBot = tuple(c[c[:, :, 1].argmax()][0])
-            topLeft = (extLeft[0], extTop[1])
-            botRight = (extRight[0], extBot[1])
-            # cv.circle(drawing, topLeft, 8, (255, 255, 255), -1)
-            # cv.circle(drawing, botRight, 8, (255, 255, 255), -1)
 
-            # pprint(src_gray[topLeft[0]:botRight[0], topLeft[1]:botRight[1]])
-            if (len(src_gray[topLeft[0]:botRight[0], topLeft[1]:botRight[1]]) > 0):
-                cv.namedWindow("Contours2", cv.WINDOW_KEEPRATIO)
-                img = src_gray[topLeft[1]:botRight[1] , topLeft[0]:botRight[0]]
-                # cv.imshow('Contours3', img)
-                # _, img = cv.threshold(resize(img, 512, 512), 100, 255, 0)
-                # cv.imshow('Contours2', img)
+        # compute the bounding box for the contour, draw it on the frame,
+        # and update the text
+        (x, y, w, h) = cv.boundingRect(c)
+        cv.rectangle(original2, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        cv.circle(original2, (int(x+(w/2)), y+h), 2, (255, 0, 0), 2)
 
-                cv.rectangle(original2,topLeft,botRight,(0,255,0),3)
+        logic = int(x+(w/2)) > detectionRectangle[0][0] and int(x+(w/2)) < detectionRectangle[1][0] and (y+h) > detectionRectangle[0][1] and (y+h) < detectionRectangle[1][1]
+        if logic:
 
+            entrando = 0
 
+            cv.rectangle(original2, detectionRectangle[0], detectionRectangle[1], (255, 255, 255), 2)
+            if(time.time() - lastpasstime < 2.2):
+                lastpasstime = time.time()
+                continue
 
-                # while True:
-                #     key = cv.waitKey(1) & 0xFF
-                #     if key == ord("p"):
-                #         saveFingerPrint(img)
-                #         pprint("salvo")
-                #         break
-                #     elif key == ord("a"):
-                #         assess(img)
-                #     elif key != 255:
-                #         break
+            if((y+h) > lastpasspos):
+                entrando = 1
+            pprint(time.time() - lastpasstime)
+            pprint(y+h)
+
+            lastpasstime = time.time()
+            if((y+h) > (detectionRectangle[1][1] - ((detectionRectangle[1][1] - detectionRectangle[0][1])/2) ) ):
+            # if entrando == 0:
+                personCounter -= 1
+            else:
+                personCounter += 1
+
+    cv.putText(original2, "Contador: ", (20, 50), cv.FONT_HERSHEY_SIMPLEX, 1.0, (255,0,0), lineType=cv.LINE_AA)
+    cv.putText(original2, str(personCounter), (180, 50), cv.FONT_HERSHEY_SIMPLEX, 1.0, (255,0,0), lineType=cv.LINE_AA)
 
 
 
 
-            # print(' * Contour[%d] - Area (M_00) = %.2f - Area OpenCV: %.2f - Length: %.2f' % (i, mu[i]['m00'], cv.contourArea(contours[i]), cv.arcLength(contours[i], True)))
+    # for i in range(len(contours)):
+    #
+    #
+    #     c = contours[i]
+    #     extLeft = tuple(c[c[:, :, 0].argmin()][0])
+    #     extRight = tuple(c[c[:, :, 0].argmax()][0])
+    #     extTop = tuple(c[c[:, :, 1].argmin()][0])
+    #     extBot = tuple(c[c[:, :, 1].argmax()][0])
+    #
+    #     topLeft = (extLeft[0], extTop[1])
+    #     botRight = (extRight[0], extBot[1])
+    #
+    #     if (len(src_gray[topLeft[0]:botRight[0], topLeft[1]:botRight[1]]) > 0):
+    #         cv.rectangle(original2,topLeft,botRight,(0,255,0),3)
 
 
-    cv.namedWindow("Contours", cv.WINDOW_KEEPRATIO)
-    cv.imshow('Contours', original2)
+
+            # while True:
+            #     key = cv.waitKey(1) & 0xFF
+            #     if key == ord("p"):
+            #         saveFingerPrint(img)
+            #         pprint("salvo")
+            #         break
+            #     elif key == ord("a"):
+            #         assess(img)
+            #     elif key != 255:
+            #         break
+
+
+
+    # cv.namedWindow("Resultado", cv.WINDOW_KEEPRATIO)
+    cv.namedWindow("Thresh", cv.WINDOW_KEEPRATIO)
+    cv.imshow('Resultado', original2)
+    cv.imshow('Thresh', thresh)
+    out.write(original2)
     cv.waitKey(5)
 
 
 
-
 def readVideo():
-    global currentBackground, n, lastsrc
-    for i in range(400):
+    global currentBackground, n, lastsrc, out
+    for i in range(1):
         ret, src = video_capture.read()
 
+    x, y, _ = src.shape
+    out = cv.VideoWriter('outpy.mp4', cv.VideoWriter_fourcc('M', 'J', 'P', 'G'), 24, (y, x))
+    icount = 0
     while True:
+        # pprint(icount)
+        icount += 1
         if not video_capture.isOpened():
             print('Unable to load camera.')
             sleep(5)
@@ -115,7 +151,7 @@ def readVideo():
         if(n >0):
             currentBackground2 = currentBackground.astype("float64")
             src2 = src.astype("float64")
-            if n < 30:
+            if n < 10:
                 n += 1
             else:
                 del lasts[0]
@@ -138,23 +174,28 @@ def readVideo():
             # pprint(src2[0][0])
             # pprint(newcurrent[0][0])
             # print("\n")
-                cv.imshow("asd", currentBackground2.astype("uint8"))
+            #     cv.imshow("asd", currentBackground2.astype("uint8"))
             # newcurrent = cv.divide(newcurrent, n)
                 currentBackground = currentBackground2.astype("uint8")
             lasts.append(src2)
         else:
+            currentBackground = src
             n+= 1
 
         src_gray = cv.cvtColor(src, cv.COLOR_BGR2GRAY)
-        sub = cv.subtract(src, currentBackground)
-        src_gray = cv.cvtColor(sub, cv.COLOR_BGR2GRAY)
 
-        cv.imshow("Subtraction", src_gray)
+        teste = currentBackground.copy()
+        sub = cv.absdiff(src, currentBackground)
+        # sub = src - currentBackground
+
+        src_gray = cv.cvtColor(sub, cv.COLOR_BGR2GRAY)
+        # cv.imshow("Subtraction", src_gray)
         cv.waitKey(5)
 
         lastsrc = src
 
         # thresh_callback(100, src_gray, src)
+        thresh_callback(100, src_gray, src)
 
 
 

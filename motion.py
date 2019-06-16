@@ -7,12 +7,12 @@ from pprint import pprint
 import pickle
 
 
-currentBackground = cv.imread("frame2946.bmp");
+currentBackground = 0
 n = 0
 lastsrc = 0
 
 
-video_capture = cv.VideoCapture("road.mp4")
+video_capture = cv.VideoCapture("lab.mp4")
 
 
 
@@ -98,6 +98,9 @@ def thresh_callback(val, src_gray, original):
 
 def readVideo():
     global currentBackground, n, lastsrc
+    for i in range(750):
+        ret, src = video_capture.read()
+
     while True:
         if not video_capture.isOpened():
             print('Unable to load camera.')
@@ -117,15 +120,12 @@ def readVideo():
 
             newcurrent = cv.addWeighted(currentBackground2, (n-1)/n, src2, 1/n, 0)
 
-            # pprint(currentBackground2[0][0])
-            # pprint(src2[0][0])
-            # pprint(newcurrent[0][0])
-            # print("\n")
             cv.imshow("asd", newcurrent.astype("uint8"))
             # newcurrent = cv.divide(newcurrent, n)
             currentBackground = newcurrent.astype("uint8")
         else:
             n+= 1
+            currentBackground = src
 
         src_gray = cv.cvtColor(src, cv.COLOR_BGR2GRAY)
         sub = cv.subtract(src, currentBackground)
